@@ -1,6 +1,20 @@
+import { useState } from 'react'
 import { firebaseConfigured } from '../config'
 
 export default function Login({ auth }) {
+  const [mode, setMode] = useState('signin') // 'signin' | 'signup'
+  const [f, setF] = useState({ name: '', email: '', password: '' })
+  const [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const signup = mode === 'signup'
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    await auth.emailAuth(mode, f)
+    setBusy(false)
+  }
+
   return (
     <section className="login">
       <div className="login-card">
@@ -9,6 +23,7 @@ export default function Login({ auth }) {
         </div>
         <h1>TaskFlow</h1>
         <p className="muted">Your tasks and weekly timetable in one place — for work, study, family and everything between. AI-assisted and synced on every device.</p>
+
         <button className="btn google" onClick={auth.signIn} disabled={!firebaseConfigured}>
           <svg viewBox="0 0 48 48" width="20" height="20">
             <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z" />
@@ -18,13 +33,42 @@ export default function Login({ auth }) {
           </svg>
           Continue with Google
         </button>
-        <button className="btn ghost" onClick={auth.useDemo}>
-          Try demo mode (saved on this device only)
-        </button>
+
+        <div className="or"><span>or use email</span></div>
+
+        <form className="auth-form" onSubmit={submit}>
+          {signup && (
+            <input value={f.name} onChange={set('name')} placeholder="Your name" autoComplete="name" maxLength={60} />
+          )}
+          <input type="email" value={f.email} onChange={set('email')} placeholder="Email address" autoComplete="email" required />
+          <input
+            type="password"
+            value={f.password}
+            onChange={set('password')}
+            placeholder={signup ? 'Create a password (6+ characters)' : 'Password'}
+            autoComplete={signup ? 'new-password' : 'current-password'}
+            minLength={6}
+            required
+          />
+          <button className="btn primary" disabled={busy || !firebaseConfigured}>
+            {busy ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
+          </button>
+        </form>
+
+        <div className="auth-links">
+          {!signup && (
+            <button type="button" className="link" onClick={() => auth.resetPassword(f.email)}>Forgot password?</button>
+          )}
+          <button type="button" className="link" onClick={() => setMode(signup ? 'signin' : 'signup')}>
+            {signup ? 'Already have an account? Sign in' : 'New here? Create an account'}
+          </button>
+        </div>
+
         {auth.error && <p className="note err">{auth.error}</p>}
+        {auth.info && <p className="note ok">{auth.info}</p>}
         {!firebaseConfigured && (
           <p className="note">
-            Firebase isn’t configured yet, so Google sign-in is off. Copy <code>.env.example</code> to <code>.env</code> and fill it in (see README) — or use demo mode.
+            Firebase isn’t configured yet. Copy <code>.env.example</code> to <code>.env</code> and fill it in (see README).
           </p>
         )}
       </div>

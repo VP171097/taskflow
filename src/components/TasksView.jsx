@@ -135,7 +135,7 @@ export default function TasksView({ user, onEdit, onSplit, onTimetable }) {
 
   const hr = now.getHours()
   const greet = hr < 5 ? 'Still up' : hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening'
-  const first = user.mode === 'firebase' && user.name ? `, ${user.name.split(' ')[0]}` : ''
+  const first = user.name ? `, ${user.name.split(' ')[0]}` : ''
   const circ = 97.4
 
   return (

@@ -2,20 +2,7 @@ import { GEMINI_MODEL } from '../config'
 import { getFb } from './firebase'
 import { DAYS_LONG, dayIdx, pad, ymd } from './dates'
 
-export const KEY_LS = 'tf:aikey'
-const safeGet = (k) => {
-  try {
-    return localStorage.getItem(k)
-  } catch {
-    return null
-  }
-}
-
-/** 'firebase' = Gemini through Firebase AI Logic (no key in the browser), 'key' = user-supplied key, null = off */
-export const aiProvider = (user) => (user?.mode === 'firebase' ? 'firebase' : safeGet(KEY_LS) ? 'key' : null)
-
-const textOf = (j) => (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('')
-
+/** Gemini runs through Firebase AI Logic (Gemini Developer API), so no API key ever ships to the browser. */
 async function viaFirebase(system, parts, gc, onChunk) {
   const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
   const ai = getAI(getFb().app, { backend: new GoogleAIBackend() })
@@ -33,57 +20,14 @@ async function viaFirebase(system, parts, gc, onChunk) {
   return r.response.text()
 }
 
-async function viaRest(system, parts, gc, onChunk) {
-  const key = safeGet(KEY_LS)
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:${
-    onChunk ? 'streamGenerateContent?alt=sse' : 'generateContent'
-  }`
-  const body = { contents: [{ role: 'user', parts }], generationConfig: gc }
-  if (system) body.systemInstruction = { parts: [{ text: system }] }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const j = await res.json().catch(() => ({}))
-    throw Object.assign(new Error(j.error?.message || res.statusText), { status: res.status })
-  }
-  if (!onChunk) return textOf(await res.json())
-  const reader = res.body.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
-  let full = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    let i
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i).trim()
-      buf = buf.slice(i + 1)
-      if (line.startsWith('data:')) {
-        try {
-          full += textOf(JSON.parse(line.slice(5)))
-          onChunk(full)
-        } catch {
-          /* partial chunk */
-        }
-      }
-    }
-  }
-  return full
-}
-
 export async function aiGenerate({ user, system, parts, schema, temperature = 0.2, think = 0, onChunk }) {
-  const provider = aiProvider(user)
-  if (!provider) throw Object.assign(new Error('AI is not connected'), { code: 'no-ai' })
+  if (!user) throw Object.assign(new Error('AI is not connected'), { code: 'no-ai' })
   const gc = { temperature, thinkingConfig: { thinkingBudget: think } }
   if (schema) {
     gc.responseMimeType = 'application/json'
     gc.responseSchema = schema
   }
-  const run = (g) => (provider === 'firebase' ? viaFirebase(system, parts, g, onChunk) : viaRest(system, parts, g, onChunk))
+  const run = (g) => viaFirebase(system, parts, g, onChunk)
   try {
     return await run(gc)
   } catch (e) {
@@ -96,7 +40,6 @@ export async function aiGenerate({ user, system, parts, schema, temperature = 0.
     throw e
   }
 }
-
 const parseJSON = (t) => JSON.parse(t.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim())
 
 export async function aiJSON(opts) {
@@ -115,13 +58,13 @@ export async function aiJSON(opts) {
 
 export function friendlyError(e) {
   const m = e?.message || ''
-  if (e?.code === 'no-ai') return 'Connect Gemini first (sign in with Google, or add a free API key).'
+  if (e?.code === 'no-ai') return 'Please sign in to use the AI features.'
   if (e?.status === 429 || /quota|rate.?limit|resource.?exhausted|429/i.test(m))
-    return 'Free-tier limit reached — wait a minute and try again.'
+    return 'Free-tier limit reached â€” wait a minute and try again.'
   if (/api key not valid|API_KEY_INVALID|invalid api key/i.test(m)) return 'That API key was rejected. Check it in Google AI Studio.'
   if (/not been used|disabled|not enabled|permission|PERMISSION_DENIED|403/i.test(m))
-    return 'Gemini isn’t enabled for this Firebase project yet. Firebase console → AI Logic → Get started (Gemini Developer API).'
-  if (/network|failed to fetch|offline/i.test(m)) return 'Network problem — check your connection.'
+    return 'Gemini isnâ€™t enabled for this Firebase project yet. Firebase console â†’ AI Logic â†’ Get started (Gemini Developer API).'
+  if (/network|failed to fetch|offline/i.test(m)) return 'Network problem â€” check your connection.'
   return m.slice(0, 180) || 'Something went wrong with the AI request.'
 }
 
@@ -144,7 +87,7 @@ export async function fileToPart(file) {
   try {
     bmp = await createImageBitmap(file)
   } catch {
-    throw new Error('Couldn’t read that image (HEIC isn’t supported — use JPG or PNG).')
+    throw new Error('Couldnâ€™t read that image (HEIC isnâ€™t supported â€” use JPG or PNG).')
   }
   const s = Math.min(1, 2000 / Math.max(bmp.width, bmp.height))
   const cv = document.createElement('canvas')
@@ -247,15 +190,15 @@ export const PLAN_SCHEMA = S('object', {
 
 /* ---------- prompts ---------- */
 
-const RULES = `Formatting rules: dates are YYYY-MM-DD; times are 24-hour HH:MM; days are Mon, Tue, Wed, Thu, Fri, Sat or Sun; priority is low, med or high. Leave a field out when unknown — never guess a date or time that the user did not give or imply. For "update" and "delete", copy the id EXACTLY from the existing data. Weekly timetable entries are events with repeat=true and a day; one-off dated events use repeat=false and a date. Keep titles short and clean (fix obvious spelling, keep the user's wording). Each proposal gets a short "reason" (what in the source/situation led to it).`
+const RULES = `Formatting rules: dates are YYYY-MM-DD; times are 24-hour HH:MM; days are Mon, Tue, Wed, Thu, Fri, Sat or Sun; priority is low, med or high. Leave a field out when unknown â€” never guess a date or time that the user did not give or imply. For "update" and "delete", copy the id EXACTLY from the existing data. Weekly timetable entries are events with repeat=true and a day; one-off dated events use repeat=false and a date. Keep titles short and clean (fix obvious spelling, keep the user's wording). Each proposal gets a short "reason" (what in the source/situation led to it).`
 
 export function importSystem(mode, { persona, profile, tasks, events }) {
-  const intro = `You are TaskFlow's scheduling assistant. The user is: ${persona.label}. Their usual categories: ${persona.cats.join(', ')} (use these names for "category" when one fits). Their day runs roughly ${profile?.start ?? persona.start}:00–${Math.min(profile?.end ?? persona.end, 24)}:00.\n${nowInfo()}\n\nExisting data (JSON):\n${snapshot(tasks, events)}\n\n${RULES}\n\n`
+  const intro = `You are TaskFlow's scheduling assistant. The user is: ${persona.label}. Their usual categories: ${persona.cats.join(', ')} (use these names for "category" when one fits). Their day runs roughly ${profile?.start ?? persona.start}:00â€“${Math.min(profile?.end ?? persona.end, 24)}:00.\n${nowInfo()}\n\nExisting data (JSON):\n${snapshot(tasks, events)}\n\n${RULES}\n\n`
   const modes = {
-    extract: `TASK: Read the user's text and/or the attached photo/PDF (it may be a messy handwritten to-do list or a timetable grid) and turn EVERYTHING in it into "add" proposals. Handwriting can be unclear: use your best reading and note uncertain words in "assumptions"; never invent entries that are not in the source. For a timetable grid, each cell is one weekly event (repeat=true) with its day and start/end time; if the grid only has period numbers, use the legend/time column shown. If an entry has no readable time, skip it and mention that in "assumptions". If an entry already exists in the existing data, do not add it again — only propose "update" when a detail genuinely differs.`,
-    build: `TASK: Build a complete, realistic weekly timetable from the user's description. Put every commitment they mention at the exact times given. Fill the rest sensibly for this kind of person — meals, rest, wind-down before sleep, exercise, family, study — and state in each such proposal's "reason" that it is a suggestion. No two events may overlap on the same day, and everything must fit inside their day. Output "add" proposals (events, plus tasks if they mention deadlines). Don't duplicate existing items.`,
+    extract: `TASK: Read the user's text and/or the attached photo/PDF (it may be a messy handwritten to-do list or a timetable grid) and turn EVERYTHING in it into "add" proposals. Handwriting can be unclear: use your best reading and note uncertain words in "assumptions"; never invent entries that are not in the source. For a timetable grid, each cell is one weekly event (repeat=true) with its day and start/end time; if the grid only has period numbers, use the legend/time column shown. If an entry has no readable time, skip it and mention that in "assumptions". If an entry already exists in the existing data, do not add it again â€” only propose "update" when a detail genuinely differs.`,
+    build: `TASK: Build a complete, realistic weekly timetable from the user's description. Put every commitment they mention at the exact times given. Fill the rest sensibly for this kind of person â€” meals, rest, wind-down before sleep, exercise, family, study â€” and state in each such proposal's "reason" that it is a suggestion. No two events may overlap on the same day, and everything must fit inside their day. Output "add" proposals (events, plus tasks if they mention deadlines). Don't duplicate existing items.`,
     review: `TASK: Audit the existing schedule and tasks. Look for overlapping events, missing meals/rest/sleep wind-down, overloaded days, tasks that are overdue, tasks with no due date that probably need one, duplicates, and unrealistic back-to-back blocks. Propose at most 12 concrete "update", "delete" or "add" changes, most valuable first, each with a clear "reason". Only propose changes you can justify from the data; if the schedule is healthy say so in "summary" and return few or no proposals.`,
-    breakdown: `TASK: Split the given task into 3–6 specific, ordered, actionable subtasks as "add" proposals with kind="task" (titles start with a verb, are short, and are not copies of the parent). Give each a sensible due date no later than the parent's deadline when one exists, and the same category.`,
+    breakdown: `TASK: Split the given task into 3â€“6 specific, ordered, actionable subtasks as "add" proposals with kind="task" (titles start with a verb, are short, and are not copies of the parent). Give each a sensible due date no later than the parent's deadline when one exists, and the same category.`,
   }
   return intro + modes[mode] + `\n\nAlways fill "summary" (one sentence) and list any guesses in "assumptions".`
 }
@@ -268,6 +211,6 @@ export const importPrompt = (mode, text, hasFile) => {
 }
 
 export const chatSystem = ({ persona, tasks, events }) =>
-  `You are TaskFlow's friendly planning assistant for a user who is: ${persona.label}.\n${nowInfo()}\n\nThe user's data (JSON):\n${snapshot(tasks, events)}\n\nRules: answer ONLY from this data and general planning advice. If the data doesn't contain what is asked, say so plainly — never invent tasks, events or times. When listing, be concise (short bullets, bold key words) and give exact dates/times. You cannot change data yourself; if the user wants to add or change things, tell them to use the "Import & build" tab.`
+  `You are TaskFlow's friendly planning assistant for a user who is: ${persona.label}.\n${nowInfo()}\n\nThe user's data (JSON):\n${snapshot(tasks, events)}\n\nRules: answer ONLY from this data and general planning advice. If the data doesn't contain what is asked, say so plainly â€” never invent tasks, events or times. When listing, be concise (short bullets, bold key words) and give exact dates/times. You cannot change data yourself; if the user wants to add or change things, tell them to use the "Import & build" tab.`
 
-export const planSystem = `You are a careful day planner. You get the current time, the window of the day that is still available, fixed events (cannot move) and open tasks. Build a realistic plan for the rest of today: schedule tasks ONLY inside free gaps (never overlap a fixed event or another block), use each task's real id, prefer overdue → high priority → earliest due date, estimate sensible durations (15–120 minutes; split nothing), leave 5–10 minute breaks between long blocks, and stay inside the window. It is fine not to schedule everything — skip lower-priority tasks that don't fit. Return times as 24-hour HH:MM. "summary" is one or two sentences; "tips" has at most 3 short, practical tips; each block's "reason" is under 12 words.`
+export const planSystem = `You are a careful day planner. You get the current time, the window of the day that is still available, fixed events (cannot move) and open tasks. Build a realistic plan for the rest of today: schedule tasks ONLY inside free gaps (never overlap a fixed event or another block), use each task's real id, prefer overdue â†’ high priority â†’ earliest due date, estimate sensible durations (15â€“120 minutes; split nothing), leave 5â€“10 minute breaks between long blocks, and stay inside the window. It is fine not to schedule everything â€” skip lower-priority tasks that don't fit. Return times as 24-hour HH:MM. "summary" is one or two sentences; "tips" has at most 3 short, practical tips; each block's "reason" is under 12 words.`

@@ -3,7 +3,7 @@ import { LogoSvg } from './Login'
 import { useStore } from '../lib/store'
 
 export default function TopBar({ user, view, setView, onAI, onPdf, onProfile, onLogout, theme, toggleTheme }) {
-  const { pending, cloud } = useStore()
+  const { pending } = useStore()
   const [menu, setMenu] = useState(false)
   const ref = useRef(null)
 
@@ -36,8 +36,8 @@ export default function TopBar({ user, view, setView, onAI, onPdf, onProfile, on
         <button className="btn ai small" onClick={() => onAI('chat')} title="AI assistant">
           ✨ <span>AI</span>
         </button>
-        <span className={`badge ${cloud && !pending ? 'ok' : ''}`} title="Sync status">
-          {cloud ? (pending ? 'Syncing…' : '✓ Synced') : 'Local only'}
+        <span className={`badge ${!pending ? 'ok' : ''}`} title="Sync status">
+          {pending ? 'Syncing…' : '✓ Synced'}
         </span>
         <button className="icon-btn" onClick={onPdf} title="Download PDF" aria-label="Download PDF">
           ⬇

@@ -5,7 +5,7 @@ import { firebaseConfig, firebaseConfigured } from '../config'
 
 let inst = null
 
-/** Lazily initialises Firebase. Returns null when no config is provided (demo mode). */
+/** Lazily initialises Firebase. Returns null when no Firebase config is provided. */
 export function getFb() {
   if (!firebaseConfigured) return null
   if (!inst) {

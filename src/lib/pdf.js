@@ -14,7 +14,7 @@ export async function makePdf({ user, profile, tasks, events, wk = 0, hours: [h0
   const ws = weekStart(wk)
   const we = addDays(ws, 6)
   const range = `${shortDate(ws)} – ${shortDate(we)} ${we.getFullYear()}`
-  const owner = user?.name && user.mode === 'firebase' ? user.name : 'My planner'
+  const owner = user?.name || 'My planner'
   const BRAND = [99, 102, 241]
   const INK = [18, 20, 42]
   const GREY = [107, 112, 144]
