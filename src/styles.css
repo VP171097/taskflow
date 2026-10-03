@@ -25,15 +25,14 @@ input[type=checkbox],input[type=radio]{width:auto}
 textarea{resize:vertical}
 
 /* animated background */
-.blobs{position:fixed;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+.blobs{position:fixed;inset:0;overflow:hidden;z-index:-1;pointer-events:none}
 .blobs i{position:absolute;width:46vmax;height:46vmax;border-radius:50%;filter:blur(90px);opacity:.28;animation:float 22s ease-in-out infinite}
 .blobs i:nth-child(1){background:#6366f1;top:-18vmax;left:-12vmax}
 .blobs i:nth-child(2){background:#ec4899;right:-18vmax;top:10vmax;animation-delay:-7s;opacity:.18}
 .blobs i:nth-child(3){background:#06b6d4;bottom:-22vmax;left:25vmax;animation-delay:-14s;opacity:.18}
 [data-theme=dark] .blobs i{opacity:.16}
 @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(6vmax,4vmax) scale(1.12)}}
-.app{position:relative;min-height:100vh}
-.app>*:not(.blobs){position:relative;z-index:1}
+.app{position:relative;min-height:100vh;isolation:isolate}
 
 /* buttons */
 .btn{border:1px solid transparent;border-radius:10px;padding:9px 16px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .1s,box-shadow .2s,background .15s,filter .2s;white-space:nowrap;background:var(--card)}
